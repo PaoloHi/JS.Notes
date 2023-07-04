@@ -1,5 +1,7 @@
 using adminRummet.Center;
 using adminRummet.Models;
+using DocumentFormat.OpenXml.Spreadsheet;
+using Microsoft.AspNetCore.Mvc;
 using System.Data;
 using System.Data.SqlClient;
 
@@ -7,8 +9,6 @@ namespace adminRummet.Tools
 {
     public class HerramientasDocumentos
     {
-        //Metodo que generea un nombre Aleatorio p
-
         //Método que devuelve el guardado y conversión de archivos
         public List<HerramientaDocBrokerG> GuardadoDocumento(IFormFile documento, string pathDoc, string nombreCarpeta)
         {
@@ -97,6 +97,7 @@ namespace adminRummet.Tools
             return oListaParametros;
         }
 
+
         // par al funcion del borrraod de documentosd 
         public bool EliminarDocumento(string UserM, string tabla, int IDdoc, int IDstatusDoc)
         {
@@ -121,13 +122,13 @@ namespace adminRummet.Tools
 
                     string sp_encontrarRuta = "";
                     string sp_EliminarRegistro = "";
-                    string carpetaDocumentos = ""; 
+                    string carpetaDocumentos = "";
 
                     if (tabla == "usuarios" || tabla == "brokers")
                     {
-                         sp_encontrarRuta = sp_encontrarRutaLista[0];
-                         sp_EliminarRegistro = sp_EliminarRegistroLista[0];
-                         carpetaDocumentos = carpetaDocumentosLista[0];
+                        sp_encontrarRuta = sp_encontrarRutaLista[0];
+                        sp_EliminarRegistro = sp_EliminarRegistroLista[0];
+                        carpetaDocumentos = carpetaDocumentosLista[0];
 
                         if (tabla == "brokers")
                         {
@@ -144,7 +145,7 @@ namespace adminRummet.Tools
                         carpetaDocumentos = carpetaDocumentosLista[2];
 
                     }
-                    else if( tabla == "Hipo")
+                    else if (tabla == "Hipo")
                     {
                         sp_encontrarRuta = sp_encontrarRutaLista[2];
                         sp_EliminarRegistro = sp_EliminarRegistroLista[2];
@@ -177,7 +178,7 @@ namespace adminRummet.Tools
                         }
 
                     }
-                    var pathCarpetaDoc = System.IO.Path.Combine(carpetaDocumentos );
+                    var pathCarpetaDoc = System.IO.Path.Combine(carpetaDocumentos);
 
                     //directorio + DocumentosUsuarios // Carpeta 
                     string RutaArchivoEliminar = Path.Combine(Directory.GetCurrentDirectory(), pathCarpetaDoc, RutaCarpetaArcvhicoEliminar);
@@ -214,9 +215,90 @@ namespace adminRummet.Tools
         }
 
 
-        public bool EditarDocumentosPropiedad(string UserM, string PropiedadID, IFormFile Archivo, string FileName, int? IDdocPropiedad)
+        //este metodo se encarga de guardar el documento en la carperta 
+        private void GuardarDocEnCarpeta (string FileName, IFormFile archivo, ref RegistroDocumentosBD  Registro, string carpetaBD, string carpetaDocumentos)
         {
-            bool rpta;
+            var pathCarpetaDoc = System.IO.Path.Combine(carpetaDocumentos);
+
+            string NombreArchivoConExtension;
+            string rutaDocProp;
+            string extDocProp;
+            FileInfo sizeDocProp;
+
+            var NombreArchivo = FileName;
+            if (NombreArchivo != null)
+            {
+
+                //Obteniendo el nombre de la carpeta
+                string nombreCarpeta = carpetaBD;
+
+                var pathCarpetaPropDoc = System.IO.Path.Combine(pathCarpetaDoc, carpetaBD);
+
+                string pathDoc = Path.Combine(Directory.GetCurrentDirectory(), pathCarpetaDoc, carpetaBD);
+
+                //para eliminar el documento al actualizarlo 
+                string RutaArchivoEliminar = Path.Combine(pathDoc, NombreArchivo);
+                File.Delete(RutaArchivoEliminar);
+
+                Guid gDocumento = Guid.NewGuid();
+                
+                NombreArchivoConExtension = gDocumento + Path.GetExtension(archivo.FileName);
+
+                // Generando ruta para el guardado del documento ruta completa del acrchivo
+                string filePredialWithPath = Path.Combine(pathDoc, NombreArchivoConExtension);
+
+                using (var fileStream = new FileStream(filePredialWithPath, FileMode.Create))
+                {
+                    archivo.CopyTo(fileStream);
+                }
+
+                // datos a mandar a la base de datos 
+                rutaDocProp = Path.Combine(carpetaBD, NombreArchivoConExtension);
+                extDocProp = Path.GetExtension(archivo.FileName);
+                sizeDocProp = new FileInfo(filePredialWithPath);
+
+            }
+            else
+            {
+
+                var pathCarpetaPropDoc = System.IO.Path.Combine(pathCarpetaDoc, carpetaBD);
+
+                System.IO.Directory.CreateDirectory(pathCarpetaPropDoc);
+
+                //esta es la ruta completa de la carpeta 
+                string pathDoc = Path.Combine(Directory.GetCurrentDirectory(), pathCarpetaDoc, carpetaBD);
+
+                //Generando nombre aleatroio
+                Guid NombreArcvhivoGuid = Guid.NewGuid();
+
+                NombreArchivoConExtension = NombreArcvhivoGuid + Path.GetExtension(archivo.FileName);
+
+                // Generando ruta para el guardado del documento ruta completa del acrchivo
+                string filePredialWithPath = Path.Combine(pathDoc, NombreArchivoConExtension);
+
+                using (var fileStream = new FileStream(filePredialWithPath, FileMode.Create))
+                {
+                    archivo.CopyTo(fileStream);
+                }
+
+                // datos a mandar a la base de datos 
+                rutaDocProp = Path.Combine(carpetaBD, NombreArchivoConExtension);
+                extDocProp= Path.GetExtension(archivo.FileName);
+                sizeDocProp = new FileInfo(filePredialWithPath);
+            }
+
+            Registro.NombreArchivoCExtension = NombreArchivoConExtension;
+            Registro.rutaDoc = rutaDocProp;
+            Registro.extDoc = extDocProp;
+            Registro.sizeDoc = sizeDocProp;
+
+        }
+
+        //este metodo se encarga de guardar los documentos en la base de datos 
+        public void GuardarDocBD(string sp_editarDoc, RegistroDocumentosBD Registro, ref bool rpta)
+        {
+
+            string carpetaBD = "";
             try
             {
                 var cn = new Conexion();
@@ -225,116 +307,107 @@ namespace adminRummet.Tools
                 {
                     conexion.Open();
 
-                    if (FileName != null)
+
+                    // Guardado de la infromacion de iamgenes en la base de datos
+                    SqlCommand gArchivoUsus = new SqlCommand(sp_editarDoc, conexion);
+                    gArchivoUsus.Parameters.AddWithValue("fileNombre", Registro.NombreArchivoCExtension);
+                    gArchivoUsus.Parameters.AddWithValue("fileSize", Registro.sizeDoc.Length);
+                    gArchivoUsus.Parameters.AddWithValue("extension", Registro.extDoc);
+                    gArchivoUsus.Parameters.AddWithValue("filePath", Registro.rutaDoc);
+                    gArchivoUsus.Parameters.AddWithValue("IDDoc", Registro.IDdoc);
+                    gArchivoUsus.CommandType = CommandType.StoredProcedure;
+                    //Usuario Modificador;
+                    if (Registro.UserM == null)
                     {
-
-
-                        var pathCarpetaDoc = System.IO.Path.Combine("DocumentosPropiedad");
-                        //DocumentosPropiedad/Rummet20345-12
-                        var documentosPropiedad = System.IO.Path.Combine(pathCarpetaDoc, PropiedadID);
-                        //toda la ruta hasta la carpeta
-                        string carpetaPropiedadRuta = Path.Combine(Directory.GetCurrentDirectory(), pathCarpetaDoc, PropiedadID);
-
-
-                        string RutaArchivoEliminar = Path.Combine(carpetaPropiedadRuta, FileName);
-
-                        File.Delete(RutaArchivoEliminar);
-
-                        Guid gDocumento = Guid.NewGuid();
-
-                        string NombreArchivoCExtension = gDocumento + Path.GetExtension(Archivo.FileName);
-
-                        string RutaArchivoGuardar = Path.Combine(carpetaPropiedadRuta, NombreArchivoCExtension);
-
-                        using (var fileStream = new FileStream(RutaArchivoGuardar, FileMode.Create))
-                        {
-                            Archivo.CopyTo(fileStream);
-                        }
-
-                        // datos a mandar a la base de datos 
-
-
-                        string extPredialProp = Path.GetExtension(Archivo.FileName);
-                        FileInfo sizePredialProp = new FileInfo(RutaArchivoGuardar);
-                        string ruta = Path.Combine(PropiedadID, NombreArchivoCExtension);
-
-                        // Guardado de la infromacion de iamgenes en la base de datos
-
-                        SqlCommand gArchivoProp = new SqlCommand("sp_GuardarEditar_docPropiedad_adm", conexion);
-
-                        gArchivoProp.Parameters.AddWithValue("fileNombre", NombreArchivoCExtension);
-                        gArchivoProp.Parameters.AddWithValue("fileSize", sizePredialProp.Length);
-                        gArchivoProp.Parameters.AddWithValue("extension", extPredialProp);
-                        gArchivoProp.Parameters.AddWithValue("filePath", ruta);
-                        gArchivoProp.Parameters.AddWithValue("IDdocPropiedadRel", IDdocPropiedad);
-                        //Usuario Modificador;
-                        if (UserM == null)
-                        {
-                            gArchivoProp.Parameters.AddWithValue("UserM", DBNull.Value);
-                        }
-                        else
-                        {
-                            gArchivoProp.Parameters.AddWithValue("UserM", UserM);
-                        }
-                        gArchivoProp.CommandType = CommandType.StoredProcedure;
-                        gArchivoProp.ExecuteNonQuery();
-
+                        gArchivoUsus.Parameters.AddWithValue("UserM", DBNull.Value);
                     }
                     else
                     {
-
-                        // Guardado documento 
-
-                        var pathCarpetaDoc = System.IO.Path.Combine("DocumentosPropiedad");
-
-                        var pathCarpetaPropDoc = System.IO.Path.Combine(pathCarpetaDoc, PropiedadID);
-
-                        string pathDoc = Path.Combine(Directory.GetCurrentDirectory(), pathCarpetaDoc, PropiedadID);
-                        //Generando nombre aleatroio
-                        Guid gArchivo = Guid.NewGuid();
-
-                        string NombreArchivoConExtension = gArchivo + Path.GetExtension(Archivo.FileName);
-
-                        // Generando ruta para el guardado del documento
-                        string fileDocWithPath = Path.Combine(pathDoc, NombreArchivoConExtension);
-
-                        // Guardado documentos en carpeta
-                        using (var fileStream = new FileStream(fileDocWithPath, FileMode.Create))
-                        {
-                            Archivo.CopyTo(fileStream);
-                        }
-
-                        // datos a mandar a la base de datos
-                        string rutaPredialProp = PropiedadID + "/" + NombreArchivoConExtension;
-                        string extPredialProp = Path.GetExtension(Archivo.FileName);
-                        FileInfo sizePredialProp = new FileInfo(fileDocWithPath);
-
-                        // Guardado de la infromacion de iamgenes en la base de datos
-
-                        SqlCommand gArchivoProp = new SqlCommand("sp_GuardarEditar_docPropiedad_adm", conexion);
-
-                        gArchivoProp.Parameters.AddWithValue("fileNombre", NombreArchivoConExtension);
-                        gArchivoProp.Parameters.AddWithValue("fileSize", sizePredialProp.Length);
-                        gArchivoProp.Parameters.AddWithValue("extension", extPredialProp);
-                        gArchivoProp.Parameters.AddWithValue("filePath", rutaPredialProp);
-                        gArchivoProp.Parameters.AddWithValue("IDdocPropiedadRel", IDdocPropiedad);
-                        //Usuario Modificador;
-                        if (UserM == null)
-                        {
-                            gArchivoProp.Parameters.AddWithValue("UserM", DBNull.Value);
-                        }
-                        else
-                        {
-                            gArchivoProp.Parameters.AddWithValue("UserM", UserM);
-                        }
-                        gArchivoProp.CommandType = CommandType.StoredProcedure;
-                        gArchivoProp.ExecuteNonQuery();
-
-
+                        gArchivoUsus.Parameters.AddWithValue("UserM", Registro.UserM);
                     }
+                    gArchivoUsus.CommandType = CommandType.StoredProcedure;
+                    gArchivoUsus.ExecuteNonQuery();
+
 
                 }
 
+                rpta = true;
+            }
+            catch (Exception e)
+            {
+                string error = e.Message;
+                rpta = false;
+            }
+
+        }
+
+        public bool EditarDocumentosLead(string UserM, int? IDLead, IFormFile file, string FileName, int? IDdoc)
+        {
+            bool rpta=true;
+            string carpetaBD = "";
+            string carpetaDocumentos = "DocumentosLead";
+            string sp_editarDoc  = "sp_EditarDoc_LeadI_adm";
+            RegistroDocumentosBD Registro = new RegistroDocumentosBD(); 
+            Registro.UserM = UserM; 
+            Registro.IDdoc = IDdoc;
+
+            try
+            {
+                var cn = new Conexion();
+
+                using (var conexion = new SqlConnection(cn.getConnSQL()))
+                {
+                    conexion.Open();
+
+                    //Obteniendo el nombre de la carpeta de los archivos
+                    SqlCommand cmd = new SqlCommand("sp_Obtener_CarpetaPropEditarLead_adm", conexion);
+                    cmd.Parameters.AddWithValue("IDLead", IDLead);
+                    cmd.CommandType = CommandType.StoredProcedure;
+
+                    using (var dr = cmd.ExecuteReader())
+                    {
+
+
+                        while (dr.Read())
+                        {
+                            carpetaBD = dr["carpeta"].ToString();
+
+                        }
+
+                    }
+          
+                }
+
+                GuardarDocEnCarpeta(FileName, file, ref Registro, carpetaBD, carpetaDocumentos);
+
+                GuardarDocBD(sp_editarDoc, Registro, ref rpta);
+
+            }
+            catch (Exception e)
+            {
+                string error = e.Message;
+                rpta = false;
+            }
+
+            return rpta;
+
+        }
+
+
+        public bool EditarDocumentosHipo(string UserM, IFormFile file, string FileName, int? IDdoc, string PropiedadID)
+        {
+            bool rpta = true;
+            string carpetaBD = PropiedadID;
+            string carpetaDocumentos = "DocumentosPropiedad";
+            string sp_editarDoc = "sp_EditarDoc_Hipo_adm";
+            RegistroDocumentosBD Registro = new RegistroDocumentosBD();
+            Registro.UserM = UserM;
+            Registro.IDdoc = IDdoc;
+
+            try
+            {
+                GuardarDocEnCarpeta(FileName, file, ref Registro, carpetaBD, carpetaDocumentos);
+                GuardarDocBD(sp_editarDoc, Registro, ref rpta);
 
                 rpta = true;
             }
@@ -348,11 +421,29 @@ namespace adminRummet.Tools
 
         }
 
-
         public bool EditarDocumentosUsuarios(string UserM, int? IDusuario, IFormFile file, string FileName, int? IDdocUsuario, string controller)
         {
-            bool rpta;
+           
             string carpetaBD = "";
+            bool rpta = true;
+            string carpetaDocumentos = "";
+            string sp_editarDoc = "sp_EditarDoc_Usuarios_adm";
+            RegistroDocumentosBD Registro = new RegistroDocumentosBD();
+            Registro.UserM = UserM;
+            Registro.IDdoc = IDdocUsuario;
+
+            if (controller == "brokers")
+            {
+                carpetaDocumentos = ("DocumentosBrokers");
+
+
+            }
+            else
+            {
+                carpetaDocumentos = "DocumentosUsuarios";
+
+            }
+
             try
             {
                 var cn = new Conexion();
@@ -382,130 +473,8 @@ namespace adminRummet.Tools
 
                     }
 
-                    var pathCarpetaDoc = "";
-                    if (controller == "brokers")
-                    {
-                        pathCarpetaDoc = System.IO.Path.Combine("DocumentosBrokers");
-
-
-                    }
-                    else
-                    {
-                        pathCarpetaDoc = System.IO.Path.Combine("DocumentosUsuarios");
-
-                    }
-
-                    var NombreArchivo = FileName;
-                    if (NombreArchivo != null)
-                    {
-
-                        //Obteniendo el nombre de la carpeta
-                        string nombreCarpeta = carpetaBD;
-
-
-                        var pathCarpetaPropDoc = System.IO.Path.Combine(pathCarpetaDoc, carpetaBD);
-
-                        string pathDoc = Path.Combine(Directory.GetCurrentDirectory(), pathCarpetaDoc, carpetaBD);
-
-                        string RutaArchivoEliminar = Path.Combine(pathDoc, NombreArchivo);
-
-                        File.Delete(RutaArchivoEliminar);
-
-                        Guid gDocumento = Guid.NewGuid();
-                        ;
-
-                        string NombreArchivoCExtension = gDocumento + Path.GetExtension(archivo.FileName);
-
-                        // Generando ruta para el guardado del documento ruta completa del acrchivo
-                        string filePredialWithPath = Path.Combine(pathDoc, NombreArchivoCExtension);
-
-                        using (var fileStream = new FileStream(filePredialWithPath, FileMode.Create))
-                        {
-                            archivo.CopyTo(fileStream);
-                        }
-
-                        // datos a mandar a la base de datos 
-                        string rutaPredialProp = Path.Combine(carpetaBD, NombreArchivoCExtension);
-                        string extPredialProp = Path.GetExtension(archivo.FileName);
-                        FileInfo sizePredialProp = new FileInfo(filePredialWithPath);
-                        // Guardado de la infromacion de iamgenes en la base de datos
-
-                        SqlCommand gArchivoUsus = new SqlCommand("sp_EditarDoc_Usuarios_adm", conexion);
-
-                        cmd.Parameters.AddWithValue("IDUsuario", IDusuario);
-
-                        gArchivoUsus.Parameters.AddWithValue("fileNombre", NombreArchivoCExtension);
-                        gArchivoUsus.Parameters.AddWithValue("fileSize", sizePredialProp.Length);
-                        gArchivoUsus.Parameters.AddWithValue("extension", extPredialProp);
-                        gArchivoUsus.Parameters.AddWithValue("filePath", rutaPredialProp);
-                        gArchivoUsus.Parameters.AddWithValue("IDDoc", IDdocUsuario);
-                        gArchivoUsus.CommandType = CommandType.StoredProcedure;
-                        //Usuario Modificador;
-                        if (UserM == null)
-                        {
-                            gArchivoUsus.Parameters.AddWithValue("UserM", DBNull.Value);
-                        }
-                        else
-                        {
-                            gArchivoUsus.Parameters.AddWithValue("UserM", UserM);
-                        }
-                        gArchivoUsus.CommandType = CommandType.StoredProcedure;
-                        gArchivoUsus.ExecuteNonQuery();
-
-
-                    }
-                    else
-                    {
-
-                        var pathCarpetaPropDoc = System.IO.Path.Combine(pathCarpetaDoc, carpetaBD);
-
-                        System.IO.Directory.CreateDirectory(pathCarpetaPropDoc);
-
-                        //esta es la ruta completa de la carpeta 
-                        string pathDoc = Path.Combine(Directory.GetCurrentDirectory(), pathCarpetaDoc, carpetaBD);
-
-                        //Generando nombre aleatroio
-                        Guid NombreArcvhivoGuid = Guid.NewGuid();
-
-                        string NombreArchivoConExtension = NombreArcvhivoGuid + Path.GetExtension(archivo.FileName);
-
-                        // Generando ruta para el guardado del documento ruta completa del acrchivo
-                        string filePredialWithPath = Path.Combine(pathDoc, NombreArchivoConExtension);
-
-                        using (var fileStream = new FileStream(filePredialWithPath, FileMode.Create))
-                        {
-                            archivo.CopyTo(fileStream);
-                        }
-
-                        // datos a mandar a la base de datos 
-                        string rutaPredialProp = Path.Combine(carpetaBD, NombreArchivoConExtension);
-                        string extPredialProp = Path.GetExtension(archivo.FileName);
-                        FileInfo sizePredialProp = new FileInfo(filePredialWithPath);
-                        // Guardado de la infromacion de iamgenes en la base de datos
-
-                        SqlCommand gArchivoUsus = new SqlCommand("sp_EditarDoc_Usuarios_adm", conexion);
-
-
-                        gArchivoUsus.Parameters.AddWithValue("fileNombre", NombreArchivoConExtension);
-                        gArchivoUsus.Parameters.AddWithValue("fileSize", sizePredialProp.Length);
-                        gArchivoUsus.Parameters.AddWithValue("extension", extPredialProp);
-                        gArchivoUsus.Parameters.AddWithValue("filePath", rutaPredialProp);
-                        gArchivoUsus.Parameters.AddWithValue("IDDoc", IDdocUsuario);
-                        gArchivoUsus.CommandType = CommandType.StoredProcedure;
-                        //Usuario Modificador;
-                        if (UserM == null)
-                        {
-                            gArchivoUsus.Parameters.AddWithValue("UserM", DBNull.Value);
-                        }
-                        else
-                        {
-                            gArchivoUsus.Parameters.AddWithValue("UserM", UserM);
-                        }
-                        gArchivoUsus.CommandType = CommandType.StoredProcedure;
-                        gArchivoUsus.ExecuteNonQuery();
-
-                    }
-
+                    GuardarDocEnCarpeta(FileName, file, ref Registro, carpetaBD, carpetaDocumentos);
+                    GuardarDocBD(sp_editarDoc, Registro, ref rpta);
 
                 }
 
@@ -521,299 +490,23 @@ namespace adminRummet.Tools
 
         }
 
-        public bool EditarDocumentosLead(string UserM, int? IDLead, IFormFile file, string FileName, int? IDdoc)
+
+        public bool EditarDocumentosPropiedad(string UserM, string PropiedadID, IFormFile Archivo, string FileName, int? IDdocPropiedad)
         {
-            bool rpta;
-            string carpetaBD = "";
-            try
-            {
-                var cn = new Conexion();
 
-                using (var conexion = new SqlConnection(cn.getConnSQL()))
-                {
-                    conexion.Open();
-
-
-                    IFormFile archivo = file;
-
-                    //Obteniendo el nombre de la carpeta de los archivos
-                    SqlCommand cmd = new SqlCommand("sp_Obtener_CarpetaPropEditarLead_adm", conexion);
-                    cmd.Parameters.AddWithValue("IDLead", IDLead);
-                    cmd.CommandType = CommandType.StoredProcedure;
-
-                    using (var dr = cmd.ExecuteReader())
-                    {
-
-
-                        while (dr.Read())
-                        {
-                            carpetaBD = dr["carpeta"].ToString();
-
-                        }
-
-                    }
-
-                    var pathCarpetaDoc = System.IO.Path.Combine("DocumentosLead");
-
-
-                    var NombreArchivo = FileName;
-                    if (NombreArchivo != null)
-                    {
-
-                        //Obteniendo el nombre de la carpeta
-                        string nombreCarpeta = carpetaBD;
-
-
-                        var pathCarpetaPropDoc = System.IO.Path.Combine(pathCarpetaDoc, carpetaBD);
-
-                        string pathDoc = Path.Combine(Directory.GetCurrentDirectory(), pathCarpetaDoc, carpetaBD);
-
-                        string RutaArchivoEliminar = Path.Combine(pathDoc, NombreArchivo);
-
-                        File.Delete(RutaArchivoEliminar);
-
-                        Guid gDocumento = Guid.NewGuid();
-                        ;
-
-                        string NombreArchivoCExtension = gDocumento + Path.GetExtension(archivo.FileName);
-
-                        // Generando ruta para el guardado del documento ruta completa del acrchivo
-                        string filePredialWithPath = Path.Combine(pathDoc, NombreArchivoCExtension);
-
-                        using (var fileStream = new FileStream(filePredialWithPath, FileMode.Create))
-                        {
-                            archivo.CopyTo(fileStream);
-                        }
-
-                        // datos a mandar a la base de datos 
-                        string rutaPredialProp = Path.Combine(carpetaBD, NombreArchivoCExtension);
-                        string extPredialProp = Path.GetExtension(archivo.FileName);
-                        FileInfo sizePredialProp = new FileInfo(filePredialWithPath);
-                        // Guardado de la infromacion de iamgenes en la base de datos
-
-                        SqlCommand gArchivoUsus = new SqlCommand("sp_EditarDoc_LeadI_adm", conexion);
-
-                        gArchivoUsus.Parameters.AddWithValue("fileNombre", NombreArchivoCExtension);
-                        gArchivoUsus.Parameters.AddWithValue("fileSize", sizePredialProp.Length);
-                        gArchivoUsus.Parameters.AddWithValue("extension", extPredialProp);
-                        gArchivoUsus.Parameters.AddWithValue("filePath", rutaPredialProp);
-                        gArchivoUsus.Parameters.AddWithValue("IDDoc", IDdoc);
-                        gArchivoUsus.CommandType = CommandType.StoredProcedure;
-                        //Usuario Modificador;
-                        if (UserM == null)
-                        {
-                            gArchivoUsus.Parameters.AddWithValue("UserM", DBNull.Value);
-                        }
-                        else
-                        {
-                            gArchivoUsus.Parameters.AddWithValue("UserM", UserM);
-                        }
-                        gArchivoUsus.CommandType = CommandType.StoredProcedure;
-                        gArchivoUsus.ExecuteNonQuery();
-
-
-                    }
-                    else
-                    {
-
-                        var pathCarpetaPropDoc = System.IO.Path.Combine(pathCarpetaDoc, carpetaBD);
-
-                        System.IO.Directory.CreateDirectory(pathCarpetaPropDoc);
-
-                        //esta es la ruta completa de la carpeta 
-                        string pathDoc = Path.Combine(Directory.GetCurrentDirectory(), pathCarpetaDoc, carpetaBD);
-
-                        //Generando nombre aleatroio
-                        Guid NombreArcvhivoGuid = Guid.NewGuid();
-
-                        string NombreArchivoConExtension = NombreArcvhivoGuid + Path.GetExtension(archivo.FileName);
-
-                        // Generando ruta para el guardado del documento ruta completa del acrchivo
-                        string filePredialWithPath = Path.Combine(pathDoc, NombreArchivoConExtension);
-
-                        using (var fileStream = new FileStream(filePredialWithPath, FileMode.Create))
-                        {
-                            archivo.CopyTo(fileStream);
-                        }
-
-                        // datos a mandar a la base de datos 
-                        string rutaPredialProp = Path.Combine(carpetaBD, NombreArchivoConExtension);
-                        string extPredialProp = Path.GetExtension(archivo.FileName);
-                        FileInfo sizePredialProp = new FileInfo(filePredialWithPath);
-                        // Guardado de la infromacion de iamgenes en la base de datos
-
-                        SqlCommand gArchivoUsus = new SqlCommand("sp_EditarDoc_LeadI_adm", conexion);
-
-
-                        gArchivoUsus.Parameters.AddWithValue("fileNombre", NombreArchivoConExtension);
-                        gArchivoUsus.Parameters.AddWithValue("fileSize", sizePredialProp.Length);
-                        gArchivoUsus.Parameters.AddWithValue("extension", extPredialProp);
-                        gArchivoUsus.Parameters.AddWithValue("filePath", rutaPredialProp);
-                        gArchivoUsus.Parameters.AddWithValue("IDDoc", IDdoc);
-                        gArchivoUsus.CommandType = CommandType.StoredProcedure;
-                        //Usuario Modificador;
-                        if (UserM == null)
-                        {
-                            gArchivoUsus.Parameters.AddWithValue("UserM", DBNull.Value);
-                        }
-                        else
-                        {
-                            gArchivoUsus.Parameters.AddWithValue("UserM", UserM);
-                        }
-                        gArchivoUsus.CommandType = CommandType.StoredProcedure;
-                        gArchivoUsus.ExecuteNonQuery();
-
-                    }
-
-
-                }
-
-                rpta = true;
-            }
-            catch (Exception e)
-            {
-                string error = e.Message;
-                rpta = false;
-            }
-
-            return rpta;
-
-        }
-
-
-
-        public bool EditarDocumentosHipo(string UserM, IFormFile file, string FileName, int? IDdoc, string PropiedadID)
-        {
-            bool rpta;
             string carpetaBD = PropiedadID;
+            bool rpta = true;
+            string carpetaDocumentos = "DocumentosPropiedad";
+            string sp_editarDoc = "sp_GuardarEditar_docPropiedad_adm";
+            RegistroDocumentosBD Registro = new RegistroDocumentosBD();
+            Registro.UserM = UserM;
+            Registro.IDdoc = IDdocPropiedad;
+
             try
             {
-                var cn = new Conexion();
-
-                using (var conexion = new SqlConnection(cn.getConnSQL()))
-                {
-                    conexion.Open();
-
-
-                    IFormFile archivo = file;
-
-               
-                    var pathCarpetaDoc = System.IO.Path.Combine("DocumentosLead");
-
-
-                    var NombreArchivo = FileName;
-                    if (NombreArchivo != null)
-                    {
-
-                        //Obteniendo el nombre de la carpeta
-                        string nombreCarpeta = carpetaBD;
-
-
-                        var pathCarpetaPropDoc = System.IO.Path.Combine(pathCarpetaDoc, carpetaBD);
-
-                        string pathDoc = Path.Combine(Directory.GetCurrentDirectory(), pathCarpetaDoc, carpetaBD);
-
-                        string RutaArchivoEliminar = Path.Combine(pathDoc, NombreArchivo);
-
-                        File.Delete(RutaArchivoEliminar);
-
-                        Guid gDocumento = Guid.NewGuid();
-                        ;
-
-                        string NombreArchivoCExtension = gDocumento + Path.GetExtension(archivo.FileName);
-
-                        // Generando ruta para el guardado del documento ruta completa del acrchivo
-                        string filePredialWithPath = Path.Combine(pathDoc, NombreArchivoCExtension);
-
-                        using (var fileStream = new FileStream(filePredialWithPath, FileMode.Create))
-                        {
-                            archivo.CopyTo(fileStream);
-                        }
-
-                        // datos a mandar a la base de datos 
-                        string rutaPredialProp = Path.Combine(carpetaBD, NombreArchivoCExtension);
-                        string extPredialProp = Path.GetExtension(archivo.FileName);
-                        FileInfo sizePredialProp = new FileInfo(filePredialWithPath);
-                        // Guardado de la infromacion de iamgenes en la base de datos
-
-                        SqlCommand gArchivoUsus = new SqlCommand("sp_EditarDoc_Hipo_adm", conexion);
-
-                        gArchivoUsus.Parameters.AddWithValue("fileNombre", NombreArchivoCExtension);
-                        gArchivoUsus.Parameters.AddWithValue("fileSize", sizePredialProp.Length);
-                        gArchivoUsus.Parameters.AddWithValue("extension", extPredialProp);
-                        gArchivoUsus.Parameters.AddWithValue("filePath", rutaPredialProp);
-                        gArchivoUsus.Parameters.AddWithValue("IDDoc", IDdoc);
-                        gArchivoUsus.CommandType = CommandType.StoredProcedure;
-                        //Usuario Modificador;
-                        if (UserM == null)
-                        {
-                            gArchivoUsus.Parameters.AddWithValue("UserM", DBNull.Value);
-                        }
-                        else
-                        {
-                            gArchivoUsus.Parameters.AddWithValue("UserM", UserM);
-                        }
-                        gArchivoUsus.CommandType = CommandType.StoredProcedure;
-                        gArchivoUsus.ExecuteNonQuery();
-
-
-                    }
-                    else
-                    {
-
-                        var pathCarpetaPropDoc = System.IO.Path.Combine(pathCarpetaDoc, carpetaBD);
-
-                        System.IO.Directory.CreateDirectory(pathCarpetaPropDoc);
-
-                        //esta es la ruta completa de la carpeta 
-                        string pathDoc = Path.Combine(Directory.GetCurrentDirectory(), pathCarpetaDoc, carpetaBD);
-
-                        //Generando nombre aleatroio
-                        Guid NombreArcvhivoGuid = Guid.NewGuid();
-
-                        string NombreArchivoConExtension = NombreArcvhivoGuid + Path.GetExtension(archivo.FileName);
-
-                        // Generando ruta para el guardado del documento ruta completa del acrchivo
-                        string filePredialWithPath = Path.Combine(pathDoc, NombreArchivoConExtension);
-
-                        using (var fileStream = new FileStream(filePredialWithPath, FileMode.Create))
-                        {
-                            archivo.CopyTo(fileStream);
-                        }
-
-                        // datos a mandar a la base de datos 
-                        string rutaPredialProp = Path.Combine(carpetaBD, NombreArchivoConExtension);
-                        string extPredialProp = Path.GetExtension(archivo.FileName);
-                        FileInfo sizePredialProp = new FileInfo(filePredialWithPath);
-                        // Guardado de la infromacion de iamgenes en la base de datos
-
-                        SqlCommand gArchivoUsus = new SqlCommand("sp_EditarDoc_Hipo_adm", conexion);
-
-
-                        gArchivoUsus.Parameters.AddWithValue("fileNombre", NombreArchivoConExtension);
-                        gArchivoUsus.Parameters.AddWithValue("fileSize", sizePredialProp.Length);
-                        gArchivoUsus.Parameters.AddWithValue("extension", extPredialProp);
-                        gArchivoUsus.Parameters.AddWithValue("filePath", rutaPredialProp);
-                        gArchivoUsus.Parameters.AddWithValue("IDDoc", IDdoc);
-                        gArchivoUsus.CommandType = CommandType.StoredProcedure;
-                        //Usuario Modificador;
-                        if (UserM == null)
-                        {
-                            gArchivoUsus.Parameters.AddWithValue("UserM", DBNull.Value);
-                        }
-                        else
-                        {
-                            gArchivoUsus.Parameters.AddWithValue("UserM", UserM);
-                        }
-                        gArchivoUsus.CommandType = CommandType.StoredProcedure;
-                        gArchivoUsus.ExecuteNonQuery();
-
-                    }
-
-
-                }
-
-                rpta = true;
+                GuardarDocEnCarpeta(FileName, Archivo, ref Registro, carpetaBD, carpetaDocumentos);
+                GuardarDocBD(sp_editarDoc, Registro, ref rpta);
+             
             }
             catch (Exception e)
             {
@@ -824,8 +517,7 @@ namespace adminRummet.Tools
             return rpta;
 
         }
-
-
 
     }
+
 }
